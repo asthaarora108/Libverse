@@ -8,6 +8,9 @@ struct LogInView: View {
     @State private var isLoggedIn: Bool = false
     @State private var showAlert: Bool = false
     @State private var alertMessage: String = ""
+    @State private var showOTPView = false
+    @State private var isLoading = false
+    @State private var isPasswordVisible = false
     
     var body: some View {
         NavigationStack {
@@ -36,8 +39,7 @@ struct LogInView: View {
                         // Form Fields
                         Group {
                             customTextField(placeholder: "College Email", text: $collegeEmail, keyboardType: .emailAddress, autocapitalization: .none)
-                            
-                            customSecureField(placeholder: "Password", text: $password)
+                            passwordField(placeholder: "Password", text: $password, isPasswordVisible: $isPasswordVisible)
                         }
                         
                         // Forgot Password Link
@@ -78,13 +80,15 @@ struct LogInView: View {
             .navigationDestination(isPresented: $isLoggedIn) {
                 HomeView()
             }
+            .navigationDestination(isPresented: $showOTPView) {
+                OTPVerificationView(email: collegeEmail , password: password)
+            }
             .alert(isPresented: $showAlert) {
                 Alert(title: Text("Error"), message: Text(alertMessage), dismissButton: .default(Text("OK")))
             }
         }
     }
-    
-    // Custom text field with placeholder font and color
+
     private func customTextField(placeholder: String, text: Binding<String>, keyboardType: UIKeyboardType = .default, autocapitalization: UITextAutocapitalizationType = .words) -> some View {
         ZStack(alignment: .leading) {
             if text.wrappedValue.isEmpty {
@@ -105,27 +109,34 @@ struct LogInView: View {
         }
     }
     
-    // Custom secure field with placeholder font and color
-    private func customSecureField(placeholder: String, text: Binding<String>) -> some View {
-        ZStack(alignment: .leading) {
-            if text.wrappedValue.isEmpty {
-                Text(placeholder)
-                    .font(.custom("Courier", size: 16))
-                    .foregroundColor(.black)
-                    .padding(.leading, 10)
+    private func passwordField(placeholder: String, text: Binding<String>, isPasswordVisible: Binding<Bool>) -> some View {
+        ZStack(alignment: .trailing) {
+            if isPasswordVisible.wrappedValue {
+                TextField(placeholder, text: text)
+                    .padding()
+                    .frame(height: 43)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 0)
+                            .stroke(Color.black, lineWidth: 1.25)
+                    )
+            } else {
+                SecureField(placeholder, text: text)
+                    .padding()
+                    .frame(height: 43)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 0)
+                            .stroke(Color.black, lineWidth: 1.25)
+                    )
             }
-            SecureField("", text: text)
-                .padding()
-                .frame(height: 43)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 0)
-                        .stroke(Color.black, lineWidth: 1.25)
-                )
+            Button(action: { isPasswordVisible.wrappedValue.toggle() }) {
+                Image(systemName: isPasswordVisible.wrappedValue ? "eye" : "eye.slash")
+                    .foregroundColor(.black)
+                    .padding(.trailing, 10)
+            }
         }
     }
     
     private func logIn() {
-        // Validate email domain
         let collegeDomain = "@gmail.com"
         guard collegeEmail.hasSuffix(collegeDomain) else {
             alertMessage = "Please use your college email address (\(collegeDomain))."
@@ -133,11 +144,10 @@ struct LogInView: View {
             return
         }
         
-        // Send magic link
         Task {
             do {
                 try await SupabaseManager.shared.signIn(email: collegeEmail, password: password)
-                isLoggedIn = true // Navigate to HomeView on successful login
+                showOTPView = true
             } catch {
                 alertMessage = "Error sending magic link: \(error.localizedDescription)"
                 showAlert = true
